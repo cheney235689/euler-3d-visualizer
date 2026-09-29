@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Euler 3D Rotation Lab - Equivalent Rotation Matrix & Quaternion Telemetry</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js & OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: JetBrains Mono & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #030712;
+      color: #f1f5f9;
+      overflow: hidden;
+      margin: 0;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-card {
+      background: rgba(10, 16, 31, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .glass-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-1px);
+    }
+    .glass-btn:active {
+      transform: translateY(0);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .glass-btn.active-order {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.35), rgba(59, 130, 246, 0.35));
+      border-color: rgba(56, 189, 248, 0.8);
+      color: #38bdf8;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+    }
+    /* Matrix bracket styling */
+    .matrix-bracket-left {
+      border-left: 2px solid #38bdf8;
+      border-top: 2px solid #38bdf8;
+      border-bottom: 2px solid #38bdf8;
+      border-top-left-radius: 6px;
+      border-bottom-left-radius: 6px;
+    }
+    .matrix-bracket-right {
+      border-right: 2px solid #38bdf8;
+      border-top: 2px solid #38bdf8;
+      border-bottom: 2px solid #38bdf8;
+      border-top-right-radius: 6px;
+      border-bottom-right-radius: 6px;
+    }
+    /* Slider thumbs */
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+      transition: transform 0.1s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+    .thumb-x::-webkit-slider-thumb { background: #ef4444; box-shadow: 0 0 10px rgba(239, 68, 68, 0.8); }
+    .thumb-y::-webkit-slider-thumb { background: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.8); }
+    .thumb-z::-webkit-slider-thumb { background: #3b82f6; box-shadow: 0 0 10px rgba(59, 130, 246, 0.8); }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+  </style>
+</head>
+<body class="w-screen h-screen relative overflow-hidden">
+
+  <!-- 3D Render Canvas Container -->
+  <div id="webgl-container" class="absolute inset-0 z-0"></div>
+
+  <!-- Header Bar -->
+  <header class="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-20">
+    <div class="glass-card px-4 py-2.5 rounded-2xl flex items-center gap-3 pointer-events-auto shadow-2xl">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/25">
+        <i data-lucide="compass" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xs sm:text-sm font-bold tracking-wider text-white uppercase font-mono-code">
+            EULER 3D ROTATION LAB
+          </h1>
+          <span class="text-[10px] font-mono-code px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+            SO(3) ISOMORPHISM
+          </span>
+        </div>
+        <p class="text-[11px] text-zinc-400 mt-0.5">Dual-Representation: 3×3 Rotation Matrix &amp; Unit Quaternion</p>
+      </div>
+    </div>
+
+    <!-- Quick Camera Presets & Notification Box -->
+    <div class="flex items-center gap-2 pointer-events-auto">
+      <div class="glass-card px-2.5 py-1.5 rounded-2xl hidden md:flex items-center gap-1">
+        <span class="text-[11px] text-zinc-400 px-2 font-medium">Camera:</span>
+        <button onclick="setCameraPreset('iso')" class="glass-btn px-2.5 py-1 text-xs rounded-xl text-zinc-200">ISO</button>
+        <button onclick="setCameraPreset('front')" class="glass-btn px-2.5 py-1 text-xs rounded-xl text-zinc-200">Front (+X)</button>
+        <button onclick="setCameraPreset('top')" class="glass-btn px-2.5 py-1 text-xs rounded-xl text-zinc-200">Top (+Y)</button>
+        <button onclick="setCameraPreset('side')" class="glass-btn px-2.5 py-1 text-xs rounded-xl text-zinc-200">Side (+Z)</button>
+      </div>
+      <button id="toggleSidebarBtn" class="glass-card w-10 h-10 rounded-2xl flex md:hidden items-center justify-center text-cyan-400">
+        <i data-lucide="sliders" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Notification Toast -->
+  <div id="copyToast" class="fixed bottom-6 left-1/2 -translate-x-1/2 glass-card bg-emerald-950/80 border-emerald-500/40 text-emerald-200 px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-mono-code opacity-0 pointer-events-none transition-all duration-300 z-50 shadow-2xl">
+    <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+    <span id="copyToastMsg">Copied to clipboard!</span>
+  </div>
+
+  <!-- Gimbal Lock Alert Overlay -->
+  <div id="gimbal-lock-alert" class="absolute top-20 left-1/2 -translate-x-1/2 glass-card border-amber-500/50 bg-amber-950/70 text-amber-200 px-5 py-2.5 rounded-2xl flex items-center gap-3 z-30 transition-all duration-300 opacity-0 pointer-events-none shadow-2xl shadow-amber-950/60 max-w-md text-center">
+    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-400 shrink-0 animate-pulse"></i>
+    <div class="text-left text-xs">
+      <div class="font-bold text-amber-300">GIMBAL LOCK DETECTED!</div>
+      <div class="text-[11px] text-amber-200/80">Pitch angle has reached critical ±90°. The first and third axes are now parallel, losing one rotational degree of freedom.</div>
+    </div>
+  </div>
+
+  <!-- Left Bottom Legend / Body Axes Info -->
+  <div class="absolute bottom-4 left-4 glass-card p-3 rounded-2xl pointer-events-auto z-10 hidden sm:block">
+    <div class="text-[11px] font-semibold text-zinc-300 mb-1.5 uppercase tracking-wider flex items-center justify-between gap-4 font-mono-code">
+      <span>Body-Fixed Local Frame</span>
+      <span class="text-[10px] text-zinc-500">RGB = XYZ</span>
+    </div>
+    <div class="flex items-center gap-4 text-xs font-mono-code">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm shadow-red-500"></span>
+        <span class="text-red-400">X (Roll)</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500"></span>
+        <span class="text-emerald-400">Y (Pitch)</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500"></span>
+        <span class="text-blue-400">Z (Yaw)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Controls & Telemetry Sidebar -->
+  <aside id="sidebar" class="absolute top-20 right-4 bottom-4 w-96 max-w-[calc(100vw-32px)] glass-card rounded-3xl p-5 overflow-y-auto flex flex-col gap-5 z-20 transition-transform duration-300">
+    
+    <!-- 1. Sequence & Frame Selection -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between border-b border-white/10 pb-2">
+        <label class="text-xs font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5 font-mono-code">
+          <i data-lucide="layers" class="w-4 h-4 text-cyan-400"></i>
+          1. ROTATION SEQUENCE
+        </label>
+        <span id="currentOrderBadge" class="text-xs font-mono-code font-bold text-cyan-300 bg-cyan-500/20 px-2 py-0.5 rounded-lg border border-cyan-500/30">
+          XYZ
+        </span>
+      </div>
+
+      <!-- Tait-Bryan 6 orders -->
+      <div class="grid grid-cols-3 gap-1.5" id="orderButtonGroup">
+        <button data-order="XYZ" class="order-btn py-1.5 text-xs font-mono-code rounded-xl active-order font-bold">XYZ</button>
+        <button data-order="XZY" class="order-btn py-1.5 text-xs font-mono-code rounded-xl glass-btn text-zinc-300">XZY</button>
+        <button data-order="YXZ" class="order-btn py-1.5 text-xs font-mono-code rounded-xl glass-btn text-zinc-300">YXZ</button>
+        <button data-order="YZX" class="order-btn py-1.5 text-xs font-mono-code rounded-xl glass-btn text-zinc-300">YZX</button>
+        <button data-order="ZXY" class="order-btn py-1.5 text-xs font-mono-code rounded-xl glass-btn text-zinc-300">ZXY</button>
+        <button data-order="ZYX" class="order-btn py-1.5 text-xs font-mono-code rounded-xl glass-btn text-zinc-300">ZYX</button>
+      </div>
+
+      <!-- Reference Frame Toggle -->
+      <div class="bg-black/40 p-2.5 rounded-2xl border border-white/10 flex items-center justify-between">
+        <span class="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+          <i data-lucide="navigation" class="w-3.5 h-3.5 text-indigo-400"></i>
+          Frame
+        </span>
+        <div class="flex bg-black/60 p-0.5 rounded-xl border border-white/10">
+          <button id="btnIntrinsic" class="px-2.5 py-1 text-[11px] rounded-lg bg-indigo-600 text-white font-semibold transition">Intrinsic (Body)</button>
+          <button id="btnExtrinsic" class="px-2.5 py-1 text-[11px] rounded-lg text-zinc-400 hover:text-white transition">Extrinsic (World)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Euler Angles Input Sliders -->
+    <div class="space-y-3">
+      <div class="flex items-center justify-between border-b border-white/10 pb-2">
+        <label class="text-xs font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5 font-mono-code">
+          <i data-lucide="sliders" class="w-4 h-4 text-emerald-400"></i>
+          2. EULER ANGLES (DEG)
+        </label>
+        <button id="btnResetAngles" class="text-[11px] text-zinc-400 hover:text-white flex items-center gap-1 transition">
+          <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Zero
+        </button>
+      </div>
+
+      <!-- Axis X -->
+      <div class="bg-black/30 p-2.5 rounded-2xl border border-red-500/20">
+        <div class="flex items-center justify-between text-xs mb-1.5">
+          <span class="font-bold text-red-400 flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Axis X (Roll / α)
+          </span>
+          <div class="flex items-center gap-1">
+            <input type="number" id="numX" value="0" min="-180" max="180" class="w-14 bg-black/70 text-right px-1.5 py-0.5 text-xs rounded border border-white/10 font-mono-code text-red-300 focus:outline-none focus:border-red-500">
+            <span class="text-zinc-500 text-[10px]">°</span>
+          </div>
+        </div>
+        <input type="range" id="sliderX" min="-180" max="180" value="0" class="thumb-x">
+      </div>
+
+      <!-- Axis Y -->
+      <div class="bg-black/30 p-2.5 rounded-2xl border border-emerald-500/20">
+        <div class="flex items-center justify-between text-xs mb-1.5">
+          <span class="font-bold text-emerald-400 flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Axis Y (Pitch / β)
+          </span>
+          <div class="flex items-center gap-1">
+            <input type="number" id="numY" value="0" min="-180" max="180" class="w-14 bg-black/70 text-right px-1.5 py-0.5 text-xs rounded border border-white/10 font-mono-code text-emerald-300 focus:outline-none focus:border-emerald-500">
+            <span class="text-zinc-500 text-[10px]">°</span>
+          </div>
+        </div>
+        <input type="range" id="sliderY" min="-180" max="180" value="0" class="thumb-y">
+      </div>
+
+      <!-- Axis Z -->
+      <div class="bg-black/30 p-2.5 rounded-2xl border border-blue-500/20">
+        <div class="flex items-center justify-between text-xs mb-1.5">
+          <span class="font-bold text-blue-400 flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Axis Z (Yaw / γ)
+          </span>
+          <div class="flex items-center gap-1">
+            <input type="number" id="numZ" value="0" min="-180" max="180" class="w-14 bg-black/70 text-right px-1.5 py-0.5 text-xs rounded border border-white/10 font-mono-code text-blue-300 focus:outline-none focus:border-blue-500">
+            <span class="text-zinc-500 text-[10px]">°</span>
+          </div>
+        </div>
+        <input type="range" id="sliderZ" min="-180" max="180" value="0" class="thumb-z">
+      </div>
+
+      <!-- Playback Controls -->
+      <div class="flex gap-2 pt-1">
+        <button id="btnPlaySequence" class="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 transition">
+          <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i>
+          Step-by-Step Play
+        </button>
+        <button id="btnTestGimbalLock" class="py-2 px-3 rounded-xl bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-xs font-semibold text-amber-300 flex items-center gap-1.5 transition" title="Trigger Pitch = 90°">
+          <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+          Lock (90°)
+        </button>
+      </div>
+      <div id="sequenceStatusText" class="text-[10px] font-mono-code text-center text-zinc-400 py-0.5 px-2 rounded bg-black/40">
+        Ready
+      </div>
+    </div>
+
+    <!-- 3. EQUIVALENT ROTATION MATRIX R ∈ SO(3) CARD -->
+    <div class="bg-black/50 border border-cyan-500/30 p-3 rounded-2xl relative shadow-lg">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+          <span class="text-xs font-bold text-cyan-300 font-mono-code uppercase tracking-wider">
+            3. EQUIVALENT ROTATION MATRIX R
+          </span>
+        </div>
+        <button id="btnCopyMatrix" class="glass-btn px-2 py-0.5 text-[10px] rounded-lg text-cyan-300 hover:text-white flex items-center gap-1 transition" title="Copy 3x3 array to clipboard">
+          <i data-lucide="copy" class="w-3 h-3"></i> Copy
+        </button>
+      </div>
+
+      <div class="text-[10px] text-zinc-400 mb-2 font-mono-code flex justify-between">
+        <span>SO(3) Orthogonal Matrix: RᵀR = I</span>
+        <span class="text-cyan-400 font-bold">det(R) = +1.000</span>
+      </div>
+
+      <!-- 3x3 Matrix Grid Container with outer brackets -->
+      <div class="flex items-center justify-center gap-1.5 py-1">
+        <div class="w-2 self-stretch matrix-bracket-left"></div>
+        <div class="grid grid-cols-3 gap-x-2 gap-y-1.5 font-mono-code text-xs text-zinc-200 text-right flex-1 px-1">
+          <!-- Row 0 -->
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r00">+1.0000</div>
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r01">+0.0000</div>
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r02">+0.0000</div>
+          <!-- Row 1 -->
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r10">+0.0000</div>
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r11">+1.0000</div>
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r12">+0.0000</div>
+          <!-- Row 2 -->
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r20">+0.0000</div>
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r21">+0.0000</div>
+          <div class="bg-black/60 px-1.5 py-1 rounded border border-white/5" id="r22">+1.0000</div>
+        </div>
+        <div class="w-2 self-stretch matrix-bracket-right"></div>
+      </div>
+      <div class="text-[9px] text-zinc-500 font-mono-code text-center mt-1">Format: Row-Major [r11, r12, r13; r21, r22, r23; r31, r32, r33]</div>
+    </div>
+
+    <!-- 4. EQUIVALENT UNIT QUATERNION q CARD -->
+    <div class="bg-black/50 border border-purple-500/30 p-3 rounded-2xl relative shadow-lg">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+          <span class="text-xs font-bold text-purple-300 font-mono-code uppercase tracking-wider">
+            4. EQUIVALENT UNIT QUATERNION q
+          </span>
+        </div>
+        <button id="btnCopyQuaternion" class="glass-btn px-2 py-0.5 text-[10px] rounded-lg text-purple-300 hover:text-white flex items-center gap-1 transition" title="Copy [w, x, y, z] to clipboard">
+          <i data-lucide="copy" class="w-3 h-3"></i> Copy
+        </button>
+      </div>
+
+      <div class="text-[10px] text-zinc-400 mb-2 font-mono-code flex justify-between">
+        <span>q = w + xi + yj + zk ∈ ℍ</span>
+        <span class="text-emerald-400 font-semibold" id="txtNormVerification">‖q‖ = 1.000000</span>
+      </div>
+
+      <!-- 4 Components Cards -->
+      <div class="grid grid-cols-4 gap-1.5 font-mono-code text-xs">
+        <div class="bg-black/70 p-2 rounded-xl border border-white/10 text-center">
+          <div class="text-[10px] text-zinc-400 font-bold mb-0.5">w (Scalar)</div>
+          <div id="dispQuatW" class="text-purple-300 font-bold tracking-tight text-[11px]">+1.0000</div>
+        </div>
+        <div class="bg-black/70 p-2 rounded-xl border border-red-500/30 text-center">
+          <div class="text-[10px] text-red-400 font-bold mb-0.5">x (Roll)</div>
+          <div id="dispQuatX" class="text-red-300 font-bold tracking-tight text-[11px]">+0.0000</div>
+        </div>
+        <div class="bg-black/70 p-2 rounded-xl border border-emerald-500/30 text-center">
+          <div class="text-[10px] text-emerald-400 font-bold mb-0.5">y (Pitch)</div>
+          <div id="dispQuatY" class="text-emerald-300 font-bold tracking-tight text-[11px]">+0.0000</div>
+        </div>
+        <div class="bg-black/70 p-2 rounded-xl border border-blue-500/30 text-center">
+          <div class="text-[10px] text-blue-400 font-bold mb-0.5">z (Yaw)</div>
+          <div id="dispQuatZ" class="text-blue-300 font-bold tracking-tight text-[11px]">+0.0000</div>
+        </div>
+      </div>
+      <div class="text-[9px] text-zinc-500 font-mono-code text-center mt-1.5">Normalized Hamilton Quaternion format</div>
+    </div>
+
+    <!-- 5. Visibility Controls -->
+    <div class="pt-2 border-t border-white/10 flex flex-col gap-2 text-xs text-zinc-400">
+      <div class="flex items-center justify-between">
+        <label class="flex items-center gap-2 cursor-pointer hover:text-white transition">
+          <input type="checkbox" id="chkShowGimbals" checked class="rounded bg-black/40 border-white/20 text-cyan-500 focus:ring-0">
+          Gimbal Rings (RGB)
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer hover:text-white transition">
+          <input type="checkbox" id="chkShowWorldAxes" checked class="rounded bg-black/40 border-white/20 text-cyan-500 focus:ring-0">
+          World Axes
+        </label>
+      </div>
+      <div class="flex items-center justify-between">
+        <label class="flex items-center gap-2 cursor-pointer hover:text-white transition">
+          <input type="checkbox" id="chkShowBodyAxes" checked class="rounded bg-black/40 border-white/20 text-cyan-500 focus:ring-0">
+          Body Local Axes
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer hover:text-white transition">
+          <input type="checkbox" id="chkShowGrid" checked class="rounded bg-black/40 border-white/20 text-cyan-500 focus:ring-0">
+          Ground Reference Grid
+        </label>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+    const appState = {
+      order: 'XYZ',
+      isIntrinsic: true,
+      anglesDeg: { x: 0, y: 0, z: 0 },
+      isAnimating: false,
+      showGimbals: true,
+      showWorldAxes: true,
+      showBodyAxes: true,
+      showGrid: true,
+      matrixValues: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+      quaternionValues: { w: 1, x: 0, y: 0, z: 0 }
+    };
+
+    let scene, camera, renderer, controls;
+    let craftRootGroup;
+    let localAxesHelper, worldAxesHelper, gridHelper;
+    let gimbalGroup, ringOuter, ringMid, ringInner;
+
+    // High-visibility aerospace interceptor with ceramic white body and high-contrast accents
+    function buildAerospaceFighter() {
+      const craft = new THREE.Group();
+
+      const ceramicWhiteMat = new THREE.MeshStandardMaterial({
+        color: 0xf8fafc,
+        roughness: 0.2,
+        metalness: 0.15,
+        flatShading: true
+      });
+
+      const darkTitaniumMat = new THREE.MeshStandardMaterial({
+        color: 0x475569,
+        roughness: 0.4,
+        metalness: 0.8
+      });
+
+      const glowingCyanVisorMat = new THREE.MeshPhysicalMaterial({
+        color: 0x00f5ff,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.6,
+        roughness: 0.05,
+        metalness: 0.1,
+        transmission: 0.6,
+        transparent: true,
+        opacity: 0.95
+      });
+
+      const brightOrangeTrimMat = new THREE.MeshStandardMaterial({
+        color: 0xff5500,
+        roughness: 0.25,
+        metalness: 0.1
+      });
+
+      const ionThrusterGlowMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8
+      });
+
+      // 1. Sleek Fuselage Cone
+      const noseGeo = new THREE.ConeGeometry(0.72, 3.5, 7);
+      noseGeo.rotateX(Math.PI / 2);
+      const nose = new THREE.Mesh(noseGeo, ceramicWhiteMat);
+      craft.add(nose);
+
+      // 2. Cyan Glowing Cockpit Canopy
+      const canopyGeo = new THREE.CylinderGeometry(0.22, 0.42, 1.35, 8);
+      canopyGeo.rotateX(Math.PI / 2);
+      const canopy = new THREE.Mesh(canopyGeo, glowingCyanVisorMat);
+      canopy.position.set(0, 0.38, 0.3);
+      craft.add(canopy);
+
+      // 3. Swept Delta Wings with Titanium Inserts
+      const wingShape = new THREE.Shape();
+      wingShape.moveTo(0, 0);
+      wingShape.lineTo(2.85, -1.5);
+      wingShape.lineTo(2.65, -1.9);
+      wingShape.lineTo(0, -0.85);
+      wingShape.closePath();
+
+      const wingExtrude = new THREE.ExtrudeGeometry(wingShape, { depth: 0.08, bevelEnabled: false });
+      wingExtrude.rotateX(Math.PI / 2);
+
+      const rightWing = new THREE.Mesh(wingExtrude, ceramicWhiteMat);
+      rightWing.position.set(0, 0, 0.4);
+      craft.add(rightWing);
+
+      const leftWing = rightWing.clone();
+      leftWing.scale.set(-1, 1, 1);
+      craft.add(leftWing);
+
+      // Wingtip Orange Stabilizers
+      const tipGeo = new THREE.BoxGeometry(0.08, 0.45, 0.65);
+      const rightTip = new THREE.Mesh(tipGeo, brightOrangeTrimMat);
+      rightTip.position.set(2.75, 0.22, -1.2);
+      const leftTip = rightTip.clone();
+      leftTip.position.x = -2.75;
+      craft.add(rightTip, leftTip);
+
+      // 4. Twin Cant-Angled Vertical Stabilizers
+      const finGeo = new THREE.BoxGeometry(0.07, 1.15, 1.05);
+      const finL = new THREE.Mesh(finGeo, brightOrangeTrimMat);
+      finL.position.set(-0.62, 0.65, -1.1);
+      finL.rotation.z = -0.22;
+      const finR = new THREE.Mesh(finGeo, brightOrangeTrimMat);
+      finR.position.set(0.62, 0.65, -1.1);
+      finR.rotation.z = 0.22;
+      craft.add(finL, finR);
+
+      // 5. Dual Heavy Thrusters with Glowing Blue Plume
+      const nozzleGeo = new THREE.CylinderGeometry(0.32, 0.36, 0.5, 16);
+      nozzleGeo.rotateX(Math.PI / 2);
+      const nozzleL = new THREE.Mesh(nozzleGeo, darkTitaniumMat);
+      nozzleL.position.set(-0.46, -0.05, -1.8);
+      const nozzleR = nozzleL.clone();
+      nozzleR.position.x = 0.46;
+
+      const plumeGeo = new THREE.ConeGeometry(0.24, 1.0, 16);
+      plumeGeo.rotateX(-Math.PI / 2);
+      const plumeL = new THREE.Mesh(plumeGeo, ionThrusterGlowMat);
+      plumeL.position.set(-0.46, -0.05, -2.45);
+      const plumeR = plumeL.clone();
+      plumeR.position.x = 0.46;
+
+      craft.add(nozzleL, nozzleR, plumeL, plumeR);
+
+      // Reorient craft so Forward = +X (Roll axis / Red), Normal Up = +Y (Pitch / Green), Lateral = +Z (Yaw / Blue)
+      craft.rotation.y = -Math.PI / 2;
+
+      const wrapper = new THREE.Group();
+      wrapper.add(craft);
+      return wrapper;
+    }
+
+    function createGimbalStructure() {
+      gimbalGroup = new THREE.Group();
+
+      const makeRing = (radius, hexColor) => {
+        const geo = new THREE.TorusGeometry(radius, 0.038, 16, 120);
+        const mat = new THREE.MeshBasicMaterial({
+          color: hexColor,
+          transparent: true,
+          opacity: 0.8
+        });
+        return new THREE.Mesh(geo, mat);
+      };
+
+      ringOuter = makeRing(3.6, 0xef4444); // Red
+      ringMid   = makeRing(3.2, 0x22c55e); // Green
+      ringInner = makeRing(2.8, 0x3b82f6); // Blue
+
+      gimbalGroup.add(ringOuter, ringMid, ringInner);
+      return gimbalGroup;
+    }
+
+    function initThreeScene() {
+      const container = document.getElementById('webgl-container');
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x030712);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(7.8, 5.5, 8.8);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.35;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxDistance = 45;
+      controls.minDistance = 3;
+
+      // Lighting: Studio 3-point illumination for crisp metallic and ceramic response
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+      scene.add(ambientLight);
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1.3);
+      keyLight.position.set(12, 18, 15);
+      scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.7);
+      fillLight.position.set(-15, -6, -10);
+      scene.add(fillLight);
+
+      const topLight = new THREE.DirectionalLight(0xffffff, 0.6);
+      topLight.position.set(0, 20, 0);
+      scene.add(topLight);
+
+      // Starfield Background
+      const starGeo = new THREE.BufferGeometry();
+      const starCount = 800;
+      const starPos = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount * 3; i += 3) {
+        starPos[i] = (Math.random() - 0.5) * 160;
+        starPos[i + 1] = (Math.random() - 0.5) * 160;
+        starPos[i + 2] = (Math.random() - 0.5) * 160;
+      }
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      const starMat = new THREE.PointsMaterial({ color: 0x94a3b8, size: 0.7, transparent: true, opacity: 0.5 });
+      scene.add(new THREE.Points(starGeo, starMat));
+
+      // Ground Reference Grid
+      gridHelper = new THREE.GridHelper(18, 36, 0x06b6d4, 0x1e293b);
+      gridHelper.position.y = -2.8;
+      scene.add(gridHelper);
+
+      // World Static Coordinate Axes
+      worldAxesHelper = new THREE.AxesHelper(4.5);
+      worldAxesHelper.material.depthTest = false;
+      worldAxesHelper.material.opacity = 0.45;
+      worldAxesHelper.material.transparent = true;
+      worldAxesHelper.renderOrder = 1;
+      scene.add(worldAxesHelper);
+
+      // Target Rotatable Root
+      craftRootGroup = new THREE.Group();
+      scene.add(craftRootGroup);
+
+      const aircraft = buildAerospaceFighter();
+      craftRootGroup.add(aircraft);
+
+      // Body Local Axes (Attached to craft)
+      localAxesHelper = new THREE.AxesHelper(3.2);
+      localAxesHelper.material.depthTest = false;
+      localAxesHelper.material.linewidth = 3;
+      localAxesHelper.renderOrder = 3;
+      craftRootGroup.add(localAxesHelper);
+
+      // Gimbal Rings
+      createGimbalStructure();
+      scene.add(gimbalGroup);
+
+      window.addEventListener('resize', onResize);
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function updateSceneOrientation() {
+      const rx = THREE.MathUtils.degToRad(appState.anglesDeg.x);
+      const ry = THREE.MathUtils.degToRad(appState.anglesDeg.y);
+      const rz = THREE.MathUtils.degToRad(appState.anglesDeg.z);
+
+      if (appState.isIntrinsic) {
+        craftRootGroup.rotation.order = appState.order;
+        craftRootGroup.rotation.set(rx, ry, rz);
+      } else {
+        const revOrder = appState.order.split('').reverse().join('');
+        const euler = new THREE.Euler(rx, ry, rz, revOrder);
+        const q = new THREE.Quaternion().setFromEuler(euler);
+        craftRootGroup.quaternion.copy(q);
+      }
+
+      updateGimbals();
+      updateTelemetryDisplays();
+      detectGimbalLock();
+    }
+
+    function updateGimbals() {
+      if (!appState.showGimbals) {
+        gimbalGroup.visible = false;
+        return;
+      }
+      gimbalGroup.visible = true;
+
+      const axisColors = { X: 0xef4444, Y: 0x22c55e, Z: 0x3b82f6 };
+      const axes = appState.order.split('');
+
+      ringOuter.material.color.setHex(axisColors[axes[0]]);
+      ringMid.material.color.setHex(axisColors[axes[1]]);
+      ringInner.material.color.setHex(axisColors[axes[2]]);
+
+      const orientRing = (ring, axis) => {
+        ring.rotation.set(0, 0, 0);
+        if (axis === 'X') ring.rotation.y = Math.PI / 2;
+        else if (axis === 'Y') ring.rotation.x = Math.PI / 2;
+      };
+
+      orientRing(ringOuter, axes[0]);
+      orientRing(ringMid, axes[1]);
+      orientRing(ringInner, axes[2]);
+
+      gimbalGroup.quaternion.copy(craftRootGroup.quaternion);
+    }
+
+    function formatFloat(val) {
+      const sign = val >= 0 ? '+' : '';
+      return sign + val.toFixed(4);
+    }
+
+    function updateTelemetryDisplays() {
+      craftRootGroup.updateMatrixWorld(true);
+
+      // 1. Quaternion Telemetry
+      const q = craftRootGroup.quaternion;
+      appState.quaternionValues = { w: q.w, x: q.x, y: q.y, z: q.z };
+
+      document.getElementById('dispQuatW').innerText = formatFloat(q.w);
+      document.getElementById('dispQuatX').innerText = formatFloat(q.x);
+      document.getElementById('dispQuatY').innerText = formatFloat(q.y);
+      document.getElementById('dispQuatZ').innerText = formatFloat(q.z);
+
+      const norm = Math.sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z);
+      document.getElementById('txtNormVerification').innerText = `‖q‖ = ${norm.toFixed(6)}`;
+
+      // 2. Rotation Matrix Telemetry (Three.js matrix elements is column-major)
+      const el = craftRootGroup.matrix.elements;
+      // Row 0
+      const r00 = el[0], r01 = el[4], r02 = el[8];
+      // Row 1
+      const r10 = el[1], r11 = el[5], r12 = el[9];
+      // Row 2
+      const r20 = el[2], r21 = el[6], r22 = el[10];
+
+      appState.matrixValues = [r00, r01, r02, r10, r11, r12, r20, r21, r22];
+
+      document.getElementById('r00').innerText = formatFloat(r00);
+      document.getElementById('r01').innerText = formatFloat(r01);
+      document.getElementById('r02').innerText = formatFloat(r02);
+
+      document.getElementById('r10').innerText = formatFloat(r10);
+      document.getElementById('r11').innerText = formatFloat(r11);
+      document.getElementById('r12').innerText = formatFloat(r12);
+
+      document.getElementById('r20').innerText = formatFloat(r20);
+      document.getElementById('r21').innerText = formatFloat(r21);
+      document.getElementById('r22').innerText = formatFloat(r22);
+    }
+
+    function detectGimbalLock() {
+      const alertBox = document.getElementById('gimbal-lock-alert');
+      const middleAxis = appState.order[1];
+      let midAngle = 0;
+      if (middleAxis === 'X') midAngle = appState.anglesDeg.x;
+      else if (middleAxis === 'Y') midAngle = appState.anglesDeg.y;
+      else if (middleAxis === 'Z') midAngle = appState.anglesDeg.z;
+
+      const absNormalized = Math.abs(midAngle) % 180;
+      const isLock = Math.abs(absNormalized - 90) <= 3.0;
+
+      if (isLock) {
+        alertBox.style.opacity = '1';
+        alertBox.style.pointerEvents = 'auto';
+      } else {
+        alertBox.style.opacity = '0';
+        alertBox.style.pointerEvents = 'none';
+      }
+    }
+
+    function copyTextToClipboard(text, message) {
+      const tempInput = document.createElement('textarea');
+      tempInput.value = text;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      try {
+        document.execCommand('copy');
+        showToast(message);
+      } catch (err) {
+        console.error('Copy failed:', err);
+      }
+      document.body.removeChild(tempInput);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('copyToast');
+      const msgEl = document.getElementById('copyToastMsg');
+      msgEl.innerText = msg;
+      toast.style.opacity = '1';
+      toast.style.pointerEvents = 'auto';
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.pointerEvents = 'none';
+      }, 2200);
+    }
+
+    // Step-by-step Sequential Animation
+    async function playSequentialAnimation() {
+      if (appState.isAnimating) return;
+      appState.isAnimating = true;
+
+      const btn = document.getElementById('btnPlaySequence');
+      const statusText = document.getElementById('sequenceStatusText');
+      btn.disabled = true;
+      btn.classList.add('opacity-50');
+
+      const targetAngles = { ...appState.anglesDeg };
+      const axes = appState.order.split('');
+
+      // 1. Reset all axes to zero
+      appState.anglesDeg = { x: 0, y: 0, z: 0 };
+      syncUI();
+      updateSceneOrientation();
+
+      statusText.innerHTML = '<span class="text-cyan-400">Zeroing to base attitude (0°, 0°, 0°)...</span>';
+      await new Promise(r => setTimeout(r, 400));
+
+      // 2. Sequentially animate each axis
+      for (let i = 0; i < 3; i++) {
+        const axis = axes[i];
+        const targetDeg = targetAngles[axis.toLowerCase()];
+        statusText.innerHTML = `<span class="text-amber-300 font-bold">Step ${i + 1}/3:</span> Rotating Axis ${axis} to ${targetDeg}°`;
+        await animateAxis(axis.toLowerCase(), targetDeg, 800);
+        await new Promise(r => setTimeout(r, 180));
+      }
+
+      statusText.innerHTML = '<span class="text-emerald-400 font-bold">✓ Sequence complete</span>';
+      appState.isAnimating = false;
+      btn.disabled = false;
+      btn.classList.remove('opacity-50');
+    }
+
+    function animateAxis(axisKey, targetValue, duration) {
+      return new Promise(resolve => {
+        const startVal = appState.anglesDeg[axisKey];
+        const startTime = performance.now();
+
+        function frame(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+          appState.anglesDeg[axisKey] = Math.round(startVal + (targetValue - startVal) * ease);
+
+          syncUI();
+          updateSceneOrientation();
+
+          if (progress < 1) {
+            requestAnimationFrame(frame);
+          } else {
+            appState.anglesDeg[axisKey] = targetValue;
+            syncUI();
+            updateSceneOrientation();
+            resolve();
+          }
+        }
+        requestAnimationFrame(frame);
+      });
+    }
+
+    function syncUI() {
+      ['x', 'y', 'z'].forEach(k => {
+        const upper = k.toUpperCase();
+        document.getElementById(`slider${upper}`).value = appState.anglesDeg[k];
+        document.getElementById(`num${upper}`).value = appState.anglesDeg[k];
+      });
+    }
+
+    function setCameraPreset(view) {
+      const dist = 10;
+      switch (view) {
+        case 'iso': camera.position.set(7.8, 5.5, 8.8); break;
+        case 'front': camera.position.set(dist, 0, 0); break;
+        case 'top': camera.position.set(0, dist, 0.001); break;
+        case 'side': camera.position.set(0, 0, dist); break;
+      }
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+
+    function setupDOMListeners() {
+      lucide.createIcons();
+
+      // Sliders & Number inputs
+      ['X', 'Y', 'Z'].forEach(axis => {
+        const k = axis.toLowerCase();
+        const slider = document.getElementById(`slider${axis}`);
+        const num = document.getElementById(`num${axis}`);
+
+        const handleInput = (val) => {
+          let n = parseInt(val, 10);
+          if (isNaN(n)) n = 0;
+          n = Math.max(-180, Math.min(180, n));
+          appState.anglesDeg[k] = n;
+          slider.value = n;
+          num.value = n;
+          updateSceneOrientation();
+        };
+
+        slider.addEventListener('input', (e) => handleInput(e.target.value));
+        num.addEventListener('change', (e) => handleInput(e.target.value));
+      });
+
+      // Order buttons
+      const orderBtns = document.querySelectorAll('.order-btn');
+      orderBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          orderBtns.forEach(b => {
+            b.className = 'order-btn py-1.5 text-xs font-mono-code rounded-xl glass-btn text-zinc-300';
+          });
+          btn.className = 'order-btn py-1.5 text-xs font-mono-code rounded-xl active-order font-bold';
+          appState.order = btn.dataset.order;
+          document.getElementById('currentOrderBadge').innerText = appState.order;
+          updateSceneOrientation();
+        });
+      });
+
+      // Reference Frame: Intrinsic vs Extrinsic
+      const btnInt = document.getElementById('btnIntrinsic');
+      const btnExt = document.getElementById('btnExtrinsic');
+
+      btnInt.addEventListener('click', () => {
+        appState.isIntrinsic = true;
+        btnInt.className = 'px-2.5 py-1 text-[11px] rounded-lg bg-indigo-600 text-white font-semibold transition';
+        btnExt.className = 'px-2.5 py-1 text-[11px] rounded-lg text-zinc-400 hover:text-white transition';
+        updateSceneOrientation();
+      });
+
+      btnExt.addEventListener('click', () => {
+        appState.isIntrinsic = false;
+        btnExt.className = 'px-2.5 py-1 text-[11px] rounded-lg bg-indigo-600 text-white font-semibold transition';
+        btnInt.className = 'px-2.5 py-1 text-[11px] rounded-lg text-zinc-400 hover:text-white transition';
+        updateSceneOrientation();
+      });
+
+      // Reset Angles
+      document.getElementById('btnResetAngles').addEventListener('click', () => {
+        appState.anglesDeg = { x: 0, y: 0, z: 0 };
+        syncUI();
+        updateSceneOrientation();
+      });
+
+      // Test Gimbal Lock
+      document.getElementById('btnTestGimbalLock').addEventListener('click', () => {
+        const midAxis = appState.order[1].toLowerCase();
+        appState.anglesDeg = { x: 20, y: 20, z: 20 };
+        appState.anglesDeg[midAxis] = 90;
+        syncUI();
+        updateSceneOrientation();
+      });
+
+      // Play Sequence
+      document.getElementById('btnPlaySequence').addEventListener('click', playSequentialAnimation);
+
+      // Copy Matrix Button
+      document.getElementById('btnCopyMatrix').addEventListener('click', () => {
+        const m = appState.matrixValues;
+        const text = `// 3x3 Rotation Matrix R (Row-Major)\n[\n  [${m[0].toFixed(5)}, ${m[1].toFixed(5)}, ${m[2].toFixed(5)}],\n  [${m[3].toFixed(5)}, ${m[4].toFixed(5)}, ${m[5].toFixed(5)}],\n  [${m[6].toFixed(5)}, ${m[7].toFixed(5)}, ${m[8].toFixed(5)}]\n]`;
+        copyTextToClipboard(text, "Rotation matrix copied to clipboard!");
+      });
+
+      // Copy Quaternion Button
+      document.getElementById('btnCopyQuaternion').addEventListener('click', () => {
+        const q = appState.quaternionValues;
+        const text = `// Unit Quaternion [w, x, y, z]\n{ w: ${q.w.toFixed(6)}, x: ${q.x.toFixed(6)}, y: ${q.y.toFixed(6)}, z: ${q.z.toFixed(6)} }`;
+        copyTextToClipboard(text, "Quaternion [w, x, y, z] copied to clipboard!");
+      });
+
+      // Display Toggles
+      document.getElementById('chkShowGimbals').addEventListener('change', (e) => {
+        appState.showGimbals = e.target.checked;
+        gimbalGroup.visible = appState.showGimbals;
+      });
+
+      document.getElementById('chkShowWorldAxes').addEventListener('change', (e) => {
+        appState.showWorldAxes = e.target.checked;
+        worldAxesHelper.visible = appState.showWorldAxes;
+      });
+
+      document.getElementById('chkShowBodyAxes').addEventListener('change', (e) => {
+        appState.showBodyAxes = e.target.checked;
+        localAxesHelper.visible = appState.showBodyAxes;
+      });
+
+      document.getElementById('chkShowGrid').addEventListener('change', (e) => {
+        appState.showGrid = e.target.checked;
+        gridHelper.visible = appState.showGrid;
+      });
+
+      // Mobile Drawer Toggle
+      const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+      const sidebar = document.getElementById('sidebar');
+      let sidebarOpen = true;
+      toggleSidebarBtn.addEventListener('click', () => {
+        sidebarOpen = !sidebarOpen;
+        if (sidebarOpen) {
+          sidebar.classList.remove('translate-x-[115%]');
+        } else {
+          sidebar.classList.add('translate-x-[115%]');
+        }
+      });
+    }
+
+    function renderLoop() {
+      requestAnimationFrame(renderLoop);
+      controls.update();
+
+      // Subtle hovering animation when angles are zeroed out
+      if (!appState.isAnimating && appState.anglesDeg.x === 0 && appState.anglesDeg.y === 0 && appState.anglesDeg.z === 0) {
+        craftRootGroup.position.y = Math.sin(performance.now() * 0.002) * 0.05;
+      } else {
+        craftRootGroup.position.y = 0;
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.onload = function() {
+      initThreeScene();
+      setupDOMListeners();
+      syncUI();
+      updateSceneOrientation();
+      renderLoop();
+    };
+  </script>
+</body>
+</html>
